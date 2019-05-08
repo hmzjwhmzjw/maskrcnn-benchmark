@@ -1,5 +1,4 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-import math
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -57,7 +56,7 @@ class Pooler(nn.Module):
         """
         Arguments:
             output_size (list[tuple[int]] or list[int]): output size for the pooled region
-            scales (list[flaot]): scales for each Pooler
+            scales (list[float]): scales for each Pooler
             sampling_ratio (int): sampling ratio for ROIAlign
         """
         super(Pooler, self).__init__()
@@ -72,8 +71,8 @@ class Pooler(nn.Module):
         self.output_size = output_size
         # get the levels in the feature map by leveraging the fact that the network always
         # downsamples by a factor of 2 at each level.
-        lvl_min = -math.log2(scales[0])
-        lvl_max = -math.log2(scales[-1])
+        lvl_min = -torch.log2(torch.tensor(scales[0], dtype=torch.float32)).item()
+        lvl_max = -torch.log2(torch.tensor(scales[-1], dtype=torch.float32)).item()
         self.map_levels = LevelMapper(lvl_min, lvl_max)
 
     def convert_to_roi_format(self, boxes):
@@ -117,6 +116,18 @@ class Pooler(nn.Module):
         for level, (per_level_feature, pooler) in enumerate(zip(x, self.poolers)):
             idx_in_level = torch.nonzero(levels == level).squeeze(1)
             rois_per_level = rois[idx_in_level]
-            result[idx_in_level] = pooler(per_level_feature, rois_per_level)
+            result[idx_in_level] = pooler(per_level_feature, rois_per_level).to(dtype)
 
         return result
+
+
+def make_pooler(cfg, head_name):
+    resolution = cfg.MODEL[head_name].POOLER_RESOLUTION
+    scales = cfg.MODEL[head_name].POOLER_SCALES
+    sampling_ratio = cfg.MODEL[head_name].POOLER_SAMPLING_RATIO
+    pooler = Pooler(
+        output_size=(resolution, resolution),
+        scales=scales,
+        sampling_ratio=sampling_ratio,
+    )
+    return pooler
